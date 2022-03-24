@@ -42,21 +42,27 @@ client = bigquery.Client()
 
 
 def timestamp(dt: datetime) -> int:
-    """
-    Utility function to convert datetime objects to a timestamp, milliseconds from epoch.
-    :param dt: an instance of datetime.datetime
-    :return: Integer representing the number of milliseconds since epoch time
+    """Utility function to convert datetime objects to a timestamp, milliseconds from epoch.
+
+    Args:
+        dt: an instance of datetime.datetime
+
+    Returns:
+        Integer representing the number of milliseconds since epoch time
     """
     epoch = datetime.utcfromtimestamp(0)
     return int((dt - epoch).total_seconds() * 1000.0)
 
 
 def validate_datetime(val: str) -> Union[str, bool]:
-    """
-    A validation function to validate a string as a valid datetime string (according to pre-defined format)
-    :param val: The value to validate
-    :return: Either a str or bool. If bool, it will be a True value, signaling validation has passed. A str return
-    signals an error. The string itself will contain the error message.
+    """A validation function to validate a string as a valid datetime string (according to pre-defined format)
+
+    Args:
+        val: String. The value to validate
+
+    Returns:
+        Either a str or bool. If bool, it will be a True value, signaling validation has passed. A str return
+        signals an error. The string itself will contain the error message.
     """
     try:
         datetime.strptime(val, DT_FORMAT)
@@ -67,11 +73,13 @@ def validate_datetime(val: str) -> Union[str, bool]:
 
 
 def generate_confirm_message(**kwargs) -> str:
-    """
-    A method to generate a multi-line formatted string version of the answers given by the User. Used to get
+    """A method to generate a multi-line formatted string version of the answers given by the User. Used to get
     confirmation from the user to all his answers.
-    :param kwargs: A dictionary with all the user answers
-    :return: A formatted, multi-line string, in JSON format.
+    Args:
+        kwargs: A dictionary with all the user answers
+
+    Returns:
+        A formatted, multi-line string, in JSON format.
     """
     _answers = {
         "source_dataset": kwargs["source_dataset"].dataset_id,
@@ -89,10 +97,12 @@ def generate_confirm_message(**kwargs) -> str:
 
 
 def validate_dataset_name(dataset_name: str) -> bool:
-    """
-    Function to validate a new BigQuery dataset name.
-    :param dataset_name: The suggested name
-    :return: Boolean. True if the suggested name is valid. False otherwise.
+    """Function to validate a new BigQuery dataset name.
+    Args:
+        dataset_name: The suggested name
+
+    Returns:
+        Boolean. True if the suggested name is valid. False otherwise.
     """
     match = dataset_name_pattern.match(dataset_name)
     return match is not None
