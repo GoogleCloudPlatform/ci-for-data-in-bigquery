@@ -2,7 +2,7 @@
 
 This CLI utility will help to orchestrate the process of creating Table Snapshots and Table Clones for the purpose of implementing changes inside the BigQuery Data Warehouse.
 
-This tool automates parts of the process described in the document [CI For Data in BigQuery](https://cloud.google.com/architecture/REPLACE_LINK_HERE).
+This tool automates parts of the process described in the document [CI For Data in BigQuery](https://cloud.google.com/architecture/REPLACE_LINK_HERE). The tool was written more for demonstration purposes and is probably worth customizing before putting to use in production.
 
 ## Prerequisites
 - Python 3+ (tested using Python 3.8.12)
