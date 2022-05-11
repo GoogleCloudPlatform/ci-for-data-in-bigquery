@@ -4,7 +4,7 @@ This CLI utility will help to orchestrate the process of creating Table Snapshot
 
 This tool automates parts of the process described in the document [CI For Data in BigQuery](https://cloud.google.com/architecture/REPLACE_LINK_HERE).
 
-## Prerequists
+## Prerequisites
 - Python 3+ (tested using Python 3.8.12)
 - virtualenv (Recommended)
 
@@ -13,16 +13,22 @@ To run the utility you will need to authenticate using a service account. This c
 setting the environment variable `GOOGLE_APPLICATION_CREDENTIALS` to a valid keyfile. See more
 at [Authenticating as a service account](https://cloud.google.com/docs/authentication/production).
 
-The required permissions are:
-- `bigquery.jobs.create`
-- `bigquery.datasets.create`
+### Required Permissions
+For the base dataset, where the original tables are residing:
 - `bigquery.datasets.get`
+- `bigquery.datasets.getData`
 - `bigquery.tables.list`
+
+To create a dataset:
+- `bigquery.datasets.create`
+
+On the dataset where the table clones and snapshots will reside:
+- `bigquery.tables.create`
 - `bigquery.tables.createSnapshot`
 
 ## The process
 ### A Gif is worth a thousand words
-![Example run](example-run.gif)
+![Example run](./example-run.gif)
 
 ## In words
 The CLI utility will ask for several inputs in order to coordinate a snapshot and clone creation, on which the developer can start implementing their changes in isolation. All clones and snapshots will be a "point-in-time".
