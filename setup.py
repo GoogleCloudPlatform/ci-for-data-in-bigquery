@@ -29,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'create-dev-env = scripts.create_dev_env:main',
+            'run-tests = scripts.run_tests:main',
         ],
     },
 )
