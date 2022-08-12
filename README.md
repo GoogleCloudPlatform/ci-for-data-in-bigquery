@@ -53,7 +53,7 @@ e.g: for a source table of the name foo, a snapshot might be named `snap_2022031
 ## Writing Tests
 In the `sql_tests` directory, you can place multiple sql files. In each file, the sql statement should be designed to throw an error in case the test should fail. See [Debugging Functions](https://cloud.google.com/bigquery/docs/reference/standard-sql/debugging_functions) and [Debugging Statements](https://cloud.google.com/bigquery/docs/reference/standard-sql/debugging-statements) for more information.
 
-In each statement, the target table should be written without a dataset prefix, and with a dollar sign ('$') prefix.
+In each statement, the queried tables should be written with a dollar sign ('$') prefix and curly braces surrounding the fully qualified name of the original table ('{foo}').
 For example, assume the following SQL statement:
 ```sql
 ASSERT (
@@ -64,15 +64,26 @@ ASSERT (
     WHERE f.id IS NULL) = 0
 ) AS 'All bar records must have a valid foo id that corrosponds to a record in the foo table'
  ```
-This statement will run in BigQuery, joining `dataset1.bar` as a test table and the foo table as a reference table.
-In that case, we would rewrite only the `dataset1.bar` table to be:
+This statement will run in BigQuery, joining `dataset1.bar` as a test table and the dataset2.foo table as a reference table.
 ```sql
 ASSERT (
     (SELECT COUNT(*) 
-    FROM $bar as b 
-    LEFT JOIN dataset2.foo as f 
+    FROM ${dataset1.bar} as b 
+    LEFT JOIN ${dataset2.foo} as f 
         ON f.id = b.foo_id
     WHERE f.id IS NULL) = 0
 ) AS 'All bar records must have a valid foo id that corrosponds to a record in the foo table'
- ```.
-At runtime, the `$bar` would be replaced to the desired test table.
+ ```
+
+If we want to replace the original `dataset1.bar` with a different table `dev_dataset3.clone_of_bar` at runtime to test our changes, we need to create a translation file. This comes in the form of a json file, where each key is the original table name (as appeared in the query) and the value is the new target table. In our example this would like this:
+
+```json
+{
+  "dataset1.bar": "dev_dataset3.clone_of_bar"
+}
+``` 
+At runtime, we specify this file as a parameter to the script:
+`run-tests --translation-file translations/new_tests_configuraitno.json sql_tests/`
+This will replace any instance of `${dataset1.bar}` with our new table name. If a table is requested, but does not appear in the translation file, the parser will fallback on the original key, basically querying the original table (in cases we don't have changes to test on that table).
+
+We can use different translation files ot control which tables are under test and which tables are not.
