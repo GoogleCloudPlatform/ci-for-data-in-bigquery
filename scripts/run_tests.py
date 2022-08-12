@@ -18,6 +18,7 @@
 # remember to set your environment variable GOOGLE_APPLICATION_CREDENTIALS to point to a service-account key file. e.g:
 # `export GOOGLE_APPLICATION_CREDENTIALS="/path/to/keyfile.json"`
 import json
+import logging
 import os
 import sys
 from argparse import ArgumentParser
@@ -73,11 +74,13 @@ def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
         sql_content = " ".join(fp.readlines())
     query_template = TemplateWithDefaultKey(sql_content)
     query = query_template.substitute(translations)
+    logging.debug(f"From file {test_file_path} - executing query: '{query}'")
     try:
         result = bigquery_client.query(query)
         if result.error_result:
             return {key_name: f"ERROR {result.error_result}"}
     except Exception as e:
+        logging.exception("Caught exception during execution, not thrown by BigQuery", exc_info=e)
         return {key_name: str(e)}
     return {key_name: "OK"}
 
