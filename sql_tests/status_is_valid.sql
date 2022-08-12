@@ -1,15 +1,15 @@
-ASSERT
-  ((
-    SELECT
-      COUNT(*)
-    FROM (
-      SELECT
-        *
-      FROM
-        `${thelook_ecommerce.orders}` AS o
-      LEFT JOIN
-        `${thelook_ecommerce.users}` AS u
-      ON
-        u.id = o.user_id
-      WHERE
-        o.user_id IS NULL)) = 0) AS "No invalid user_id in orders table";
+SELECT
+IF
+  (
+    -- The test
+    status IN ('Shipped',
+      'Complete',
+      'Returned',
+      'Cancelled',
+      'Processing'),
+    -- The pass message (per record)
+    CONCAT('status ', status, ' is valid'),
+    -- The error message
+    ERROR(CONCAT('Status ', status, ' is not valid at record with unique_key=', order_id)) ) AS status_is_correct
+FROM
+  `${thelook_ecommerce.orders}`;
