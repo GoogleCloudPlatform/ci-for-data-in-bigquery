@@ -33,7 +33,7 @@ from google.cloud import bigquery
 # A unified datetime-format to be used across the script. Can be changed.
 DT_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# A compiled pattern of valid BigQuery dataset names. Used for validation in case a user chosses to create a new
+# A compiled pattern of valid BigQuery dataset names. Used for validation in case a user chooses to create a new
 # dataset.
 dataset_name_pattern = re.compile("^[a-zA-Z_]{1,1024}$")
 
@@ -108,7 +108,7 @@ def validate_dataset_name(dataset_name: str) -> bool:
     return match is not None
 
 
-if __name__ == "__main__":
+def main():
     # Get all projects
     projects = list(client.list_projects())  # type: list[bigquery.client.Project]
     source_project = inquirer.fuzzy(

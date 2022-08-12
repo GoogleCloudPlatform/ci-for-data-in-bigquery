@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+#
 # Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,5 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-google-cloud-bigquery==2.34.2
-InquirerPy==0.3.3
+
+from setuptools import setup, find_packages
+
+setup(
+    name='ci-for-data-in-bigquery',
+    version='0.1.0',
+
+    py_modules=find_packages(),
+    install_requires=[
+        "google-cloud-bigquery==3.2.0",
+        "InquirerPy==0.3.4",
+    ],
+    entry_points={
+        'console_scripts': [
+            'create-dev-env = scripts.create_dev_env:main',
+            'run-tests = scripts.run_tests:main',
+        ],
+    },
+)
