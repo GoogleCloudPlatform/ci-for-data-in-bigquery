@@ -6,10 +6,10 @@ ASSERT
       SELECT
         *
       FROM
-        `thelook_ecommerce.orders` AS o
+        `${thelook_ecommerce.orders}` AS o
       LEFT JOIN
-        `thelook_ecommerce.users` AS u
+        `${thelook_ecommerce.users}` AS u
       ON
         u.id = o.user_id
       WHERE
-        o.user_id IS NULL)) = 0) AS "No invalid user_id in orders table";
+        u.id IS NULL)) = 0) AS "No invalid user_id in orders table";
