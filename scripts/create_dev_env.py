@@ -20,22 +20,18 @@
 
 from __future__ import print_function, unicode_literals
 
-import json
-import re
+import argparse
+import dataclasses
 import sys
+from argparse import ArgumentParser, Namespace
 from datetime import datetime
-from typing import Union
+from typing import List
 
-from InquirerPy import inquirer
-from InquirerPy.base import Choice
+import google
 from google.cloud import bigquery
 
 # A unified datetime-format to be used across the script. Can be changed.
-DT_FORMAT = "%Y-%m-%d %H:%M:%S"
-
-# A compiled pattern of valid BigQuery dataset names. Used for validation in case a user chooses to create a new
-# dataset.
-dataset_name_pattern = re.compile("^[a-zA-Z_]{1,1024}$")
+DT_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 # One BigQuery Client to rule them all
 client = bigquery.Client()
@@ -54,163 +50,103 @@ def timestamp(dt: datetime) -> int:
     return int((dt - epoch).total_seconds() * 1000.0)
 
 
-def validate_datetime(val: str) -> Union[str, bool]:
-    """A validation function to validate a string as a valid datetime string (according to pre-defined format)
-
-    Args:
-        val: String. The value to validate
-
-    Returns:
-        Either a str or bool. If bool, it will be a True value, signaling validation has passed. A str return
-        signals an error. The string itself will contain the error message.
-    """
+def source_tables(astring: str) -> bigquery.Table:
     try:
-        datetime.strptime(val, DT_FORMAT)
-    except:
-        return "There was a problem with the date format"
-    else:
-        return True
+        tbl = client.get_table(astring)
+    except Exception as e:
+        print(e)
+        raise e
+    return tbl
 
 
-def generate_confirm_message(**kwargs) -> str:
-    """A method to generate a multi-line formatted string version of the answers given by the User. Used to get
-    confirmation from the user to all his answers.
-    Args:
-        kwargs: A dictionary with all the user answers
-
-    Returns:
-        A formatted, multi-line string, in JSON format.
-    """
-    _answers = {
-        "source_dataset": kwargs["source_dataset"].dataset_id,
-        "source_tables":  [t.table_id for t in kwargs["source_tables"]],
-        "point_in_time":  kwargs["point_in_time"].strftime(DT_FORMAT),
-        "target_dataset": {
-            "create_new":
-                kwargs["target_dataset"] is None,
-            "name":
-                kwargs["target_dataset"].dataset_id
-                if kwargs["target_dataset"] else kwargs["target_dataset_name"],
-        }
-    }
-    return json.dumps(_answers, indent=2)
+def target_dataset(astring: str) -> bigquery.DatasetReference:
+    try:
+        ref = bigquery.DatasetReference.from_string(astring, client.project)
+    except Exception as e:
+        print(e)
+        raise e
+    return ref
 
 
-def validate_dataset_name(dataset_name: str) -> bool:
-    """Function to validate a new BigQuery dataset name.
-    Args:
-        dataset_name: The suggested name
+def datetime_type(astring: str) -> datetime:
+    return datetime.strptime(astring, DT_FORMAT)
 
-    Returns:
-        Boolean. True if the suggested name is valid. False otherwise.
-    """
-    match = dataset_name_pattern.match(dataset_name)
-    return match is not None
+
+def get_parser() -> ArgumentParser:
+    parser = ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                            prog="create-dev-env", description="Create DEV environment for BigQuery Data Integration")
+    parser.add_argument("--source-table", required=True, type=source_tables, action='append', dest='source_tables',
+                        help="Source table(s). List of tables to be cloned into the development environment. "
+                             "Use the BigQuery syntax of dataset and table name seperated by dots, "
+                             "with optional project_id as a prefix."
+                             "Examples: --source-table my_dataset1.table1 "
+                             "--source-table different_project.my_dataset2.table2")
+    parser.add_argument("--target-dataset", required=True, type=target_dataset, dest='target_dataset',
+                        help="The target dataset to which to clone the source tables. "
+                             "If the `--create-dataset` option is specified, dataset MUST NOT be already exists, "
+                             "and it will be created. "
+                             "If the `--create-dataset` option is NOT specified, the dataset MUST be already exists.")
+    parser.add_argument("--create-dataset", action='store_true', dest='create_dataset',
+                        help="Changes the behavior of searching for a target dataset. "
+                             "If specified, the program will throw an error in case a dataset already exists or create "
+                             "it and continue. If not specified, the program will throw an error in case the dataset "
+                             "does not exists, or use the dataset for creating the development environment.")
+    parser.add_argument("--when", type=datetime_type, default=datetime.utcnow().strftime(DT_FORMAT), dest='when',
+                        help=f"The point-in-time to take clones and snapshots of the source tables. "
+                             f"Specify in the format 'YYYY-mm-ddTHH:MM:SS'")
+    return parser
+
+
+@dataclasses.dataclass()
+class ProgramArguments:
+    source_tables: List[bigquery.Table]
+    target_dataset: bigquery.DatasetReference
+    create_dataset: bool
+    when: datetime
+
+    def __init__(self, ns: Namespace):
+        self.when = ns.when
+        self.source_tables = ns.source_tables
+        self.target_dataset = ns.target_dataset
+        self.create_dataset = ns.create_dataset
 
 
 def main():
     # Get all projects
-    projects = list(client.list_projects())  # type: list[bigquery.client.Project]
-    source_project = inquirer.fuzzy(
-        message="Select a source project (up and down keys to move, enter to select)",
-        choices=[Choice(value=p, name=p.friendly_name) for p in projects],
-        default=None,
-        mandatory=True,
-        mandatory_message="(Required)",
-    ).execute()  # type: bigquery.client.Project
+    parser = get_parser()
+    args = parser.parse_args(sys.argv[1:])
+    args = ProgramArguments(args)
 
-    datasets = {
-        d.dataset_id: d
-        for d in client.list_datasets(project=source_project.project_id)
-    }  # type: dict[str, bigquery.client.Dataset]
-    source_dataset = inquirer.select(
-        message="Select a source dataset (up and down keys to move, enter to select)",
-        choices=[
-            Choice(value=dataset, name=dataset.dataset_id)
-            for dataset in datasets.values()
-        ],
-        default=None,
-        mandatory=True,
-        mandatory_message="(Required)",
-    ).execute()  # type: bigquery.client.Dataset
-
-    tables = {t.table_id: t for t in client.list_tables(dataset=source_dataset)}
-    source_tables = inquirer.select(
-        message="Select a source tables (Space to (de)select, up and down arrows to move):",
-        choices=[
-            Choice(value=table, name=table.table_id) for table in tables.values()
-        ],
-        default=None,
-        mandatory=True,
-        mandatory_message="(Required)",
-        multiselect=True,
-        validate=lambda res: len(res) > 0,
-        invalid_message="Minimum 1 table.",
-    ).execute()  # type: list[bigquery.client.Table]
-
-    target_dataset = inquirer.select(
-        message="Select a target dataset (Select one or choose create new):",
-        choices=[
-                    Choice(value=dataset, name=dataset.dataset_id)
-                    for dataset in datasets.values()
-                ] + [Choice(value=None, name="--- CREATE NEW ---")],
-        default=None,
-    ).execute()  # type: bigquery.client.Dataset
-    target_dataset_name = None
-    if not target_dataset:
-        target_dataset_name = inquirer.text(
-            message="Enter the name for the new Dataset: ",
-            mandatory=True,
-            validate=validate_dataset_name,
-        ).execute()
-
-    point_in_time = inquirer.text(
-        message="The Point-in-Time (UTC) to make the clones. Must be in the last 7 days.\n"
-                "Specify in the format of 'yyyy-mm-dd HH:MM:ss'\n(4 digits for year, 2 digits for month, day, hours, "
-                "minutes and seconds):\n  > ",
-        validate=validate_datetime,
-        filter=lambda v: datetime.strptime(v, DT_FORMAT),
-        default=datetime.utcnow().strftime(DT_FORMAT),
-        mandatory=True,
-    ).execute()  # type: datetime
-    pretty_json = generate_confirm_message(
-        source_tables=source_tables,
-        source_dataset=source_dataset,
-        target_dataset=target_dataset,
-        point_in_time=point_in_time,
-        target_dataset_name=target_dataset_name)
-    confirmed = inquirer.confirm(
-        message=f"Review configuration\n{pretty_json}").execute()
-    if not confirmed:
-        # If the user has not confirmed the selection
-        print("Cancel...")
-        sys.exit(1)
-
-    if target_dataset is None and target_dataset_name:
-        print(f"Creating dataset {target_dataset_name}...")
-        target_dataset = bigquery.Dataset(
-            f"{source_dataset.project}.{target_dataset_name}")
-        target_dataset.location = source_dataset._properties["location"]
-        target_dataset = client.create_dataset(target_dataset, timeout=30)
-    assert target_dataset is not None and target_dataset.dataset_id is not None
+    if args.create_dataset:
+        try:
+            target_dataset = client.create_dataset(args.target_dataset, exists_ok=False)
+        except google.cloud.exceptions.Conflict:
+            parser.error(f"Dataset {args.target_dataset.path} already exists. Either Choose a non-existing dataset "
+                         f"name, or remove the `--create-dataset` flag.")
+            return
+    else:
+        try:
+            target_dataset = client.get_dataset(args.target_dataset)
+        except google.cloud.exceptions.NotFound:
+            parser.error(f"Dataset {args.target_dataset.path} does not exists. Either Choose an existing dataset "
+                         f"name, or add the `--create-dataset` flag to create it.")
+            return
 
     jobs = []
-    project = source_dataset.project
-    source_dataset_id = source_dataset.dataset_id
-    target_dataset_id = target_dataset.dataset_id
-    dt_short = point_in_time.strftime("%Y%m%d%H%M%S")
-    ts = timestamp(point_in_time)
-    for table in source_tables:
+    dt_short = args.when.strftime("%Y%m%d%H%M%S")
+    ts = timestamp(args.when)
+
+    for table in args.source_tables:
         # for each table, run 2 copy jobs, one is a snapshot, and one a clone.
         # Both tables will be copied using the same timestamp
-        source_id = f"{project}.{source_dataset_id}.{table.table_id}@{ts}"
-        snapshot_id = f"{project}.{target_dataset_id}.snap_{dt_short}_{table.table_id}"
-        clone_id = f"{project}.{target_dataset_id}.clone_{dt_short}_{table.table_id}"
+        source_id = f"{table.project}.{table.dataset_id}.{table.table_id}@{ts}"
+        snapshot_id = f"{target_dataset.project}.{target_dataset.dataset_id}.snap_{dt_short}_{table.table_id}"
+        clone_id = f"{target_dataset.project}.{target_dataset.dataset_id}.clone_{dt_short}_{table.table_id}"
 
         # the call to `client.copy_table` is asynchronous, which means we can just continue, and wait for all to
         # complete at the end.
         print(
-            f"Creating snapshot for {source_dataset_id}.{table.table_id} as {snapshot_id}"
+            f"Creating snapshot for {table.project}.{table.dataset_id}.{table.table_id} as {snapshot_id}"
         )
         jobs.append(
             client.copy_table(
@@ -218,7 +154,7 @@ def main():
                 snapshot_id,
                 job_config=bigquery.job.CopyJobConfig(operation_type="SNAPSHOT")))
         print(
-            f"Creating clone for {source_dataset_id}.{table.table_id} as {clone_id}"
+            f"Creating clone for {table.project}.{table.dataset_id}.{table.table_id} as {clone_id}"
         )
         jobs.append(
             client.copy_table(

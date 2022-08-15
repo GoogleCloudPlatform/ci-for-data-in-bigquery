@@ -28,6 +28,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
+            'create-dev-env-interactive = scripts.create_dev_env_interactive:main',
             'create-dev-env = scripts.create_dev_env:main',
             'run-tests = scripts.run_tests:main',
         ],
