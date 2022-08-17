@@ -12,4 +12,4 @@ ASSERT
       ON
         o.order_id = oi.order_id
       WHERE
-        o.order_id IS NULL)) = 0) AS "No invalid user_id in orders table";
+        o.order_id IS NULL)) = 0) AS "No invalid oder_id in orders table";
