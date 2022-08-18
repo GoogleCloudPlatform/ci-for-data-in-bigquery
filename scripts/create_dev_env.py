@@ -22,10 +22,12 @@ from __future__ import print_function, unicode_literals
 
 import argparse
 import dataclasses
+import json
 import sys
 from argparse import ArgumentParser, Namespace
 from datetime import datetime
-from typing import List
+from io import TextIOWrapper
+from typing import List, Optional
 
 import google
 from google.cloud import bigquery
@@ -94,6 +96,9 @@ def get_parser() -> ArgumentParser:
     parser.add_argument("--when", type=datetime_type, default=datetime.utcnow().strftime(DT_FORMAT), dest='when',
                         help=f"The point-in-time to take clones and snapshots of the source tables. "
                              f"Specify in the format 'YYYY-mm-ddTHH:MM:SS'")
+    parser.add_argument("--translation-file", help="Create a translation JSON file.", required=False,
+                        type=argparse.FileType("w", encoding='UTF-8'), dest="translation_file")
+
     return parser
 
 
@@ -103,12 +108,14 @@ class ProgramArguments:
     target_dataset: bigquery.DatasetReference
     create_dataset: bool
     when: datetime
+    translation_file: Optional[TextIOWrapper]
 
     def __init__(self, ns: Namespace):
         self.when = ns.when
         self.source_tables = ns.source_tables
         self.target_dataset = ns.target_dataset
         self.create_dataset = ns.create_dataset
+        self.translation_file = ns.translation_file
 
 
 def main():
@@ -135,14 +142,15 @@ def main():
     jobs = []
     dt_short = args.when.strftime("%Y%m%d%H%M%S")
     ts = timestamp(args.when)
-
+    translations = {}
     for table in args.source_tables:
         # for each table, run 2 copy jobs, one is a snapshot, and one a clone.
         # Both tables will be copied using the same timestamp
         source_id = f"{table.project}.{table.dataset_id}.{table.table_id}@{ts}"
         snapshot_id = f"{target_dataset.project}.{target_dataset.dataset_id}.snap_{dt_short}_{table.table_id}"
         clone_id = f"{target_dataset.project}.{target_dataset.dataset_id}.clone_{dt_short}_{table.table_id}"
-
+        translations[f"{table.dataset_id}.{table.table_id}"] = clone_id
+        translations[f"{table.project}.{table.dataset_id}.{table.table_id}"] = clone_id
         # the call to `client.copy_table` is asynchronous, which means we can just continue, and wait for all to
         # complete at the end.
         print(
@@ -164,3 +172,6 @@ def main():
     # wait for all job results
     [job.result() for job in jobs]
     print("All tables created")
+    if args.translation_file:
+        json.dump(translations, args.translation_file, indent=2)
+        args.translation_file.close()
