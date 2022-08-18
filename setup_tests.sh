@@ -18,7 +18,7 @@ IF
     -- The error message
     ERROR(CONCAT('Status ', status, ' is not valid at record with unique_key=', order_id)) ) AS status_is_correct
 FROM
-  `${thelook_ecom_copy.orders}`;
+  \`\${thelook_ecom_copy.orders}\`;
 EOF
 # [END setup_status_test]
 
@@ -32,9 +32,9 @@ ASSERT
       SELECT
         *
       FROM
-        `${thelook_ecommerce.orders}` AS o
+        \`\${thelook_ecommerce.orders}\` AS o
       LEFT JOIN
-        `${thelook_ecommerce.users}` AS u
+        \`\${thelook_ecommerce.users}\` AS u
       ON
         u.id = o.user_id
       WHERE
@@ -52,9 +52,9 @@ ASSERT
       SELECT
         *
       FROM
-        `${thelook_ecommerce.order_items}` AS oi
+        \`\${thelook_ecommerce.order_items}\` AS oi
       LEFT JOIN
-        `${thelook_ecommerce.orders}` AS o
+        \`\${thelook_ecommerce.orders}\` AS o
       ON
         o.order_id = oi.order_id
       WHERE
