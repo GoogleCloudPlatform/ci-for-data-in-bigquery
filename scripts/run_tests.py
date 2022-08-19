@@ -89,7 +89,7 @@ def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
     sql_queries = list(
         map(lambda x: f"{x};",
             filter(lambda x: len(x) > 0,
-                   sql_content.split(";"))))
+                   sql_content.strip().split(";"))))
     results = {}
     for i, sql_query_raw in enumerate(sql_queries):
         key_name = f"{basename}_{i}"
