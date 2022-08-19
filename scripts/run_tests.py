@@ -26,6 +26,7 @@ from string import Template
 from typing import Optional
 
 from google.cloud import bigquery
+import google.auth
 
 
 class TemplateWithDefaultKey(Template):
@@ -55,6 +56,9 @@ def get_parser() -> ArgumentParser:
                             dest='translation_file')
     arg_parser.add_argument("TEST_FILE_OR_DIR_PATH", help="The test path. Can be directory of SQL files or a specific "
                                                           "file")
+    arg_parser.add_argument("--project", help="The default project to use. "
+                                              "Value must be set if not using a service account.",
+                            required=False)
     return arg_parser
 
 
@@ -64,27 +68,32 @@ def read_json_as_dict(translation_file: str) -> dict[str:str]:
     return translations
 
 
-def create_bigquery_client() -> bigquery.Client:
-    client = bigquery.Client()
+def create_bigquery_client(project: str) -> bigquery.Client:
+    client = bigquery.Client(project=project)
     return client
 
 
 def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
                   test_file_path: str) -> dict:
-    key_name = os.path.splitext(os.path.basename(test_file_path))[0]
+    basename = os.path.splitext(os.path.basename(test_file_path))[0]
     with open(test_file_path) as fp:
         sql_content = " ".join(fp.readlines())
-    query_template = TemplateWithDefaultKey(sql_content)
-    query = query_template.substitute(translations)
-    logging.debug(f"From file {test_file_path} - executing query: '{query}'")
-    try:
-        result = bigquery_client.query(query)
-        if result.error_result:
-            return {key_name: f"ERROR {result.error_result}"}
-    except Exception as e:
-        logging.exception("Caught exception during execution, not thrown by BigQuery", exc_info=e)
-        return {key_name: str(e)}
-    return {key_name: "OK"}
+    sql_queries = list(map(lambda x: f"{x};", sql_content.split(";")))
+    results = {}
+    for i, sql_query_raw in enumerate(sql_queries):
+        key_name = f"{basename}_{i}"
+        query_template = TemplateWithDefaultKey(sql_query_raw)
+        query = query_template.substitute(translations)
+        logging.debug(f"From file {test_file_path} - executing query: '{query}'")
+        try:
+            result = bigquery_client.query(query, project=bigquery_client.project)
+            if result.error_result:
+                results[key_name] = f"ERROR {result.error_result}"
+        except Exception as e:
+            logging.exception("Caught exception during execution, not thrown by BigQuery", exc_info=e)
+            results[key_name] = str(e)
+        results[key_name] = "OK"
+    return results
 
 
 def run_tests(bigquery_client: bigquery.Client, translations: dict[str:str], test_file_path: str):
@@ -100,12 +109,12 @@ def run_tests(bigquery_client: bigquery.Client, translations: dict[str:str], tes
     return results
 
 
-def run(translation_file: str, test_file_path: Optional[str]) -> int:
+def run(translation_file: str, test_file_path: Optional[str], project: str) -> int:
     """
     Main entry point
     """
     translations = read_json_as_dict(translation_file) if translation_file else {}
-    bigquery_client = create_bigquery_client()
+    bigquery_client = create_bigquery_client(project)
     test_results = run_tests(bigquery_client, translations, test_file_path)
     print("Test Name | Result")
     exit_code = 0
@@ -119,7 +128,14 @@ def run(translation_file: str, test_file_path: Optional[str]) -> int:
 def main():
     parser = get_parser()
     args = parser.parse_args(sys.argv[1:])
-    exit_code = run(translation_file=args.translation_file, test_file_path=args.TEST_FILE_OR_DIR_PATH)
+    project = args.project
+    if not project:
+        _, project = google.auth.default()
+        if not project:
+            parser.error("Could not infer project from environment. "
+                         "You must supply project_id using the `--project` parameter.")
+            sys.exit(1)
+    exit_code = run(translation_file=args.translation_file, test_file_path=args.TEST_FILE_OR_DIR_PATH, project=project)
     sys.exit(exit_code)
 
 
