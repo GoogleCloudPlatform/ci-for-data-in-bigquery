@@ -160,6 +160,7 @@ def main():
             client.copy_table(
                 source_id,
                 snapshot_id,
+                project=table.project,
                 job_config=bigquery.job.CopyJobConfig(operation_type="SNAPSHOT")))
         print(
             f"Creating clone for {table.project}.{table.dataset_id}.{table.table_id} as {clone_id}"
@@ -168,6 +169,7 @@ def main():
             client.copy_table(
                 source_id,
                 clone_id,
+                project=table.project,
                 job_config=bigquery.job.CopyJobConfig(operation_type="CLONE")))
     # wait for all job results
     [job.result() for job in jobs]
