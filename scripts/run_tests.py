@@ -23,6 +23,8 @@ import os
 import sys
 from argparse import ArgumentParser
 from string import Template
+from typing import Optional
+
 from google.cloud import bigquery
 
 
