@@ -120,6 +120,11 @@ def run_tests(bigquery_client: bigquery.Client, translations: dict[str:str], tes
     return results
 
 
+def r_pad(s: str, str_len: int, char: str = " ") -> str:
+    base_len = len(s)
+    spaces = char * max(str_len - base_len, 0)
+    return s + spaces
+
 def run(translation_file: str, test_file_path: Optional[str], project: str) -> int:
     """
     Main entry point
@@ -127,10 +132,12 @@ def run(translation_file: str, test_file_path: Optional[str], project: str) -> i
     translations = read_json_as_dict(translation_file) if translation_file else {}
     bigquery_client = create_bigquery_client(project)
     test_results = run_tests(bigquery_client, translations, test_file_path)
-    print("Test Name | Result")
+    str_len = max(map(lambda x: len(x), test_results.keys()))
+    print(f"{r_pad('Test Name', str_len)} | Result")
+    print(r_pad("", str_len, "-") + "---------")
     exit_code = 0
     for test_name, result in test_results.items():
-        print(f"{test_name} | {result}")
+        print(f"{r_pad(test_name, str_len)} | {result}")
         if result != "OK":
             exit_code = 2
     return exit_code
