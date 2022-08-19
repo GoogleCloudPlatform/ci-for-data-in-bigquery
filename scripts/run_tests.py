@@ -23,7 +23,7 @@ import os
 import sys
 from argparse import ArgumentParser
 from string import Template
-from typing import Optional
+from typing import Optional, Mapping
 
 from google.cloud import bigquery
 import google.auth
@@ -48,6 +48,14 @@ class TemplateWithDefaultKey(Template):
             key = str(err.args[0])
             kwds[key] = key
             return self.substitute(*args, **kwds)
+
+    def safe_substitute(self, __mapping: Mapping[str, object] = ..., **kwds: object) -> str:
+        try:
+            return super().safe_substitute(__mapping, **kwds)
+        except KeyError as err:
+            key = str(err.args[0])
+            kwds[key] = key
+            return self.safe_substitute(__mapping, **kwds)
 
 
 def get_parser() -> ArgumentParser:
@@ -78,12 +86,15 @@ def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
     basename = os.path.splitext(os.path.basename(test_file_path))[0]
     with open(test_file_path) as fp:
         sql_content = " ".join(fp.readlines())
-    sql_queries = list(map(lambda x: f"{x};", sql_content.split(";")))
+    sql_queries = list(
+        map(lambda x: f"{x};",
+            filter(lambda x: len(x) > 0,
+                   sql_content.split(";"))))
     results = {}
     for i, sql_query_raw in enumerate(sql_queries):
         key_name = f"{basename}_{i}"
         query_template = TemplateWithDefaultKey(sql_query_raw)
-        query = query_template.substitute(translations)
+        query = query_template.safe_substitute(translations)
         logging.debug(f"From file {test_file_path} - executing query: '{query}'")
         try:
             result = bigquery_client.query(query, project=bigquery_client.project)
