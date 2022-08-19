@@ -100,10 +100,11 @@ def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
             result = bigquery_client.query(query, project=bigquery_client.project)
             if result.error_result:
                 results[key_name] = f"ERROR {result.error_result}"
+            else:
+                results[key_name] = "OK"
         except Exception as e:
             logging.exception("Caught exception during execution, not thrown by BigQuery", exc_info=e)
             results[key_name] = str(e)
-        results[key_name] = "OK"
     return results
 
 
