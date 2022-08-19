@@ -49,7 +49,7 @@ class TemplateWithDefaultKey(Template):
 
 def get_parser() -> ArgumentParser:
     arg_parser = ArgumentParser()
-    arg_parser.add_argument('--translation-file', required=True, help='The JSON translation file of tables',
+    arg_parser.add_argument('--translation-file', required=False, help='The JSON translation file of tables',
                             dest='translation_file')
     arg_parser.add_argument("TEST_FILE_OR_DIR_PATH", help="The test path. Can be directory of SQL files or a specific "
                                                           "file")
@@ -98,11 +98,11 @@ def run_tests(bigquery_client: bigquery.Client, translations: dict[str:str], tes
     return results
 
 
-def run(translation_file: str, test_file_path: str) -> int:
+def run(translation_file: str, test_file_path: Optional[str]) -> int:
     """
     Main entry point
     """
-    translations = read_json_as_dict(translation_file)
+    translations = read_json_as_dict(translation_file) if translation_file else {}
     bigquery_client = create_bigquery_client()
     test_results = run_tests(bigquery_client, translations, test_file_path)
     print("Test Name | Result")
