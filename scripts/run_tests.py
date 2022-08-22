@@ -22,11 +22,12 @@ import logging
 import os
 import sys
 from argparse import ArgumentParser
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from string import Template
-from typing import Optional, Mapping
+from typing import Optional, Union
 
-from google.cloud import bigquery
 import google.auth
+from google.cloud import bigquery
 
 
 class TemplateWithDefaultKey(Template):
@@ -92,11 +93,7 @@ def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
         query = query_template.substitute(translations)
         logging.debug(f"From file {test_file_path} - executing query: '{query}'")
         try:
-            result = bigquery_client.query(query, project=bigquery_client.project)
-            if result.error_result:
-                results[key_name] = f"ERROR {result.error_result}"
-            else:
-                results[key_name] = "OK"
+            results[key_name] = bigquery_client.query(query, project=bigquery_client.project)
         except Exception as e:
             logging.exception("Caught exception during execution, not thrown by BigQuery", exc_info=e)
             results[key_name] = str(e)
@@ -122,21 +119,38 @@ def r_pad(s: str, str_len: int, char: str = " ") -> str:
     return s + spaces
 
 
+def result_with_key(key_name: str, job: Union[str, bigquery.QueryJob]):
+    if type(job) == str:
+        return key_name, job
+    try:
+        wait(job)
+        if job.error_result:
+            return key_name, f"ERROR {job.error_result}"
+        else:
+            return key_name, "OK"
+    except Exception as e:
+        return key_name, str(e)
+
 def run(translation_file: str, test_file_path: Optional[str], project: str) -> int:
     """
     Main entry point
     """
     translations = read_json_as_dict(translation_file) if translation_file else {}
     bigquery_client = create_bigquery_client(project)
-    test_results = run_tests(bigquery_client, translations, test_file_path)
-    str_len = max(map(lambda x: len(x), test_results.keys()))
-    print(f"{r_pad('Test Name', str_len)} | Result")
-    print(r_pad("", str_len, "-") + "---------")
+    threads = []
+    executor = ThreadPoolExecutor(5)
+    for key_name, job in run_tests(bigquery_client, translations, test_file_path).items():
+        threads.append(executor.submit(result_with_key, key_name, job))
+
+    print("Test Name            | Result")
+    print("---------------------+-------------------------")
+
     exit_code = 0
-    for test_name, result in test_results.items():
-        print(f"{r_pad(test_name, str_len)} | {result}")
+    for future in as_completed(threads):
+        key_name, result = future.result()
         if result != "OK":
             exit_code = 2
+        print(f"{r_pad(key_name, 20)} | {result}")
     return exit_code
 
 
