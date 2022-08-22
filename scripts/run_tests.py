@@ -147,7 +147,7 @@ async def run(translation_file: str, test_file_path: Optional[str], project: str
     return exit_code
 
 
-async def main():
+def main():
     parser = get_parser()
     args = parser.parse_args(sys.argv[1:])
     project = args.project
@@ -157,10 +157,10 @@ async def main():
             parser.error("Could not infer project from environment. "
                          "You must supply project_id using the `--project` parameter.")
             sys.exit(1)
-    exit_code = await run(translation_file=args.translation_file, test_file_path=args.TEST_FILE_OR_DIR_PATH,
-                          project=project)
+    exit_code = asyncio.run(run(translation_file=args.translation_file, test_file_path=args.TEST_FILE_OR_DIR_PATH,
+                                project=project))
     sys.exit(exit_code)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
