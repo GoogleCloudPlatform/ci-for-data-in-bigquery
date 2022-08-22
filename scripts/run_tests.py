@@ -38,6 +38,9 @@ class TemplateWithDefaultKey(Template):
     If the table is not being tested, it will fall back to the right table.
     """
 
+    # Added a dot (.) to the base pattern, as it is used in query patterns to separate dataset from table names
+    idpattern = r'(?a:[_a-z][_a-z0-9\.]*)'
+
     def __init__(self, template):
         super().__init__(template)
 
@@ -48,14 +51,6 @@ class TemplateWithDefaultKey(Template):
             key = str(err.args[0])
             kwds[key] = key
             return self.substitute(*args, **kwds)
-
-    def safe_substitute(self, __mapping: Mapping[str, object] = ..., **kwds: object) -> str:
-        try:
-            return super().safe_substitute(__mapping, **kwds)
-        except KeyError as err:
-            key = str(err.args[0])
-            kwds[key] = key
-            return self.safe_substitute(__mapping, **kwds)
 
 
 def get_parser() -> ArgumentParser:
@@ -94,7 +89,7 @@ def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
     for i, sql_query_raw in enumerate(sql_queries):
         key_name = f"{basename}_{i}"
         query_template = TemplateWithDefaultKey(sql_query_raw)
-        query = query_template.safe_substitute(translations)
+        query = query_template.substitute(translations)
         logging.debug(f"From file {test_file_path} - executing query: '{query}'")
         try:
             result = bigquery_client.query(query, project=bigquery_client.project)
@@ -125,6 +120,7 @@ def r_pad(s: str, str_len: int, char: str = " ") -> str:
     base_len = len(s)
     spaces = char * max(str_len - base_len, 0)
     return s + spaces
+
 
 def run(translation_file: str, test_file_path: Optional[str], project: str) -> int:
     """
