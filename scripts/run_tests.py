@@ -18,15 +18,15 @@
 # remember to set your environment variable GOOGLE_APPLICATION_CREDENTIALS to point to a service-account key file. e.g:
 # `export GOOGLE_APPLICATION_CREDENTIALS="/path/to/keyfile.json"`
 import json
-import logging
 import os
 import sys
 from argparse import ArgumentParser
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait
+import asyncio
 from string import Template
-from typing import Optional, Union
+from typing import Optional
 
 import google.auth
+from google.api_core.exceptions import BadRequest
 from google.cloud import bigquery
 
 
@@ -77,8 +77,7 @@ def create_bigquery_client(project: str) -> bigquery.Client:
     return client
 
 
-def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
-                  test_file_path: str) -> dict:
+def get_tests_to_run_from_file(test_file_path: str, translations: dict[str:str]) -> dict[str:str]:
     basename = os.path.splitext(os.path.basename(test_file_path))[0]
     with open(test_file_path) as fp:
         sql_content = " ".join(fp.readlines())
@@ -91,25 +90,20 @@ def run_test_file(bigquery_client: bigquery.Client, translations: dict[str:str],
         key_name = f"{basename}_{i}"
         query_template = TemplateWithDefaultKey(sql_query_raw)
         query = query_template.substitute(translations)
-        logging.debug(f"From file {test_file_path} - executing query: '{query}'")
-        try:
-            results[key_name] = bigquery_client.query(query, project=bigquery_client.project)
-        except Exception as e:
-            logging.exception("Caught exception during execution, not thrown by BigQuery", exc_info=e)
-            results[key_name] = str(e)
+        results[key_name] = query
     return results
 
 
-def run_tests(bigquery_client: bigquery.Client, translations: dict[str:str], test_file_path: str):
+def get_tests_to_run(test_file_path: str, translations: dict[str:str]) -> dict[str:str]:
     if not os.path.exists(test_file_path):
         raise Exception(f"{test_file_path} does not exists")
     if os.path.isfile(test_file_path):
-        test_result = run_test_file(bigquery_client, translations, test_file_path)
+        test_result = get_tests_to_run_from_file(test_file_path, translations)
         return test_result
     assert os.path.isdir(test_file_path)
     results = {}
     for file in os.listdir(test_file_path):
-        results.update(run_test_file(bigquery_client, translations, os.path.join(test_file_path, file)))
+        results.update(get_tests_to_run_from_file(os.path.join(test_file_path, file), translations))
     return results
 
 
@@ -119,42 +113,41 @@ def r_pad(s: str, str_len: int, char: str = " ") -> str:
     return s + spaces
 
 
-def result_with_key(key_name: str, job: Union[str, bigquery.QueryJob]):
-    if type(job) == str:
-        return key_name, job
+async def result_with_key(query: str, bigquery_client: bigquery.Client):
     try:
-        wait(job)
+        job = bigquery_client.query(query)
+        while not job.done():
+            await asyncio.sleep(1)
         if job.error_result:
-            return key_name, f"ERROR {job.error_result}"
+            return job.error_result['message']
         else:
-            return key_name, "OK"
+            return "OK"
+    except BadRequest as br:
+        return br.errors[0]['message']
     except Exception as e:
-        return key_name, str(e)
+        return str(e)
 
-def run(translation_file: str, test_file_path: Optional[str], project: str) -> int:
+
+async def run(translation_file: str, test_file_path: Optional[str], project: str) -> int:
     """
     Main entry point
     """
     translations = read_json_as_dict(translation_file) if translation_file else {}
     bigquery_client = create_bigquery_client(project)
-    threads = []
-    executor = ThreadPoolExecutor(5)
-    for key_name, job in run_tests(bigquery_client, translations, test_file_path).items():
-        threads.append(executor.submit(result_with_key, key_name, job))
-
-    print("Test Name            | Result")
-    print("---------------------+-------------------------")
-
+    tests_to_run = get_tests_to_run(test_file_path, translations)
+    max_test_name = max(map(lambda x: len(x), tests_to_run.keys()))
+    print(f"{r_pad('Test Name', max_test_name)} | Result")
+    print(f"{r_pad('', max_test_name, '-')}-+-------------------------")
     exit_code = 0
-    for future in as_completed(threads):
-        key_name, result = future.result()
-        if result != "OK":
+    for key_name, query in tests_to_run.items():
+        res = await result_with_key(query=query, bigquery_client=bigquery_client)
+        if res != "OK":
             exit_code = 2
-        print(f"{r_pad(key_name, 20)} | {result}")
+        print(f"{r_pad(key_name, max_test_name)} | {res}")
     return exit_code
 
 
-def main():
+async def main():
     parser = get_parser()
     args = parser.parse_args(sys.argv[1:])
     project = args.project
@@ -164,9 +157,10 @@ def main():
             parser.error("Could not infer project from environment. "
                          "You must supply project_id using the `--project` parameter.")
             sys.exit(1)
-    exit_code = run(translation_file=args.translation_file, test_file_path=args.TEST_FILE_OR_DIR_PATH, project=project)
+    exit_code = await run(translation_file=args.translation_file, test_file_path=args.TEST_FILE_OR_DIR_PATH,
+                          project=project)
     sys.exit(exit_code)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
