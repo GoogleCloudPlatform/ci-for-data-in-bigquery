@@ -22,8 +22,29 @@ FROM
 EOF
 # [END setup_status_test]
 
-# [START setup_no_missing_users_test]
-cat <<EOF > sql_tests/no_missing_users_in_orders_table.sql
+
+# [START setup_datetime_tests]
+cat <<EOF > sql_tests/test_datetimes.sql
+SELECT
+IF
+  (
+    -- The test
+    DATETIME_DIFF(shipped_at, created_at, SECOND) >= 0,
+
+    -- The pass message (per record)
+    'Shipped date is after created date',
+
+    -- The error message
+    ERROR(CONCAT('Shipped date ', shipped_at, ' is before created date', created_at, ' at record with unique_key=', order_id)) )
+FROM
+  \`\${the_look_ecom_copy.orders}\`
+WHERE
+  shipped_at IS NOT NULL AND created_at IS NOT NULL;
+EOF
+# [END setup_datetime_tests]
+
+# [START setup_no_missing_joins_1]
+cat <<EOF > sql_tests/no_missing_joins.sql
 ASSERT
   ((
     SELECT
@@ -38,12 +59,12 @@ ASSERT
       ON
         u.id = o.user_id
       WHERE
-        u.id IS NULL)) = 0) AS "No invalid user_id in orders table";
+        u.id IS NULL)) = 0) AS "orders table has a non-existing user_id";
 EOF
-# [END setup_no_missing_users_test]
+# [END setup_no_missing_joins_1]
 
-# [START setup_no_missing_orders_test]
-cat <<EOF > sql_tests/no_missing_orders_in_order_items_table.sql
+# [START setup_no_missing_joins_2]
+cat <<EOF >> sql_tests/no_missing_joins.sql
 ASSERT
   ((
     SELECT
@@ -58,6 +79,6 @@ ASSERT
       ON
         o.order_id = oi.order_id
       WHERE
-        o.order_id IS NULL)) = 0) AS "No invalid order_id in orders table";
+        o.order_id IS NULL)) = 0) AS "order_items has an non-existing order_id";
 EOF
-# [END setup_no_missing_orders_test]
+# [END setup_no_missing_joins_2]
