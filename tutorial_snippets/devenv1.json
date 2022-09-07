@@ -1,0 +1,6 @@
+{
+  "the_look_ecom_copy.order_items": "<YOUR_PROJECT_ID>.devenv1.clone_<YOUR_DATETIME>_order_items",
+  "<YOUR_PROJECT_ID>.the_look_ecom_copy.order_items": "<YOUR_PROJECT_ID>.devenv1.clone_<YOUR_DATETIME>_order_items",
+  "the_look_ecom_copy.orders": "<YOUR_PROJECT_ID>.devenv1.clone_<YOUR_DATETIME>_orders",
+  "<YOUR_PROJECT_ID>.the_look_ecom_copy.orders": "<YOUR_PROJECT_ID>.devenv1.clone_<YOUR_DATETIME>_orders"
+}
